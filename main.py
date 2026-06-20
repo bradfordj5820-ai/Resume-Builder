@@ -1,5 +1,3 @@
-%%writefile resume_agent/main.py
-
 import os
 import re
 import pandas as pd
