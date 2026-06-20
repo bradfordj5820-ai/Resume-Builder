@@ -1,4 +1,4 @@
-ssteps:
+steps:
   # Build using Buildpacks and tag it as 'latest'
   - name: 'gcr.io/k8s-skaffold/pack'
     args: 
