@@ -1,12 +1,12 @@
 steps:
-  # The --no-cache argument forces a completely fresh dependency installation
+  # The --clear-cache flag successfully forces a completely fresh dependency installation
   - name: 'gcr.io/k8s-skaffold/pack'
     args: 
       - 'build'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/resume-builder:latest'
       - '--builder'
       - 'gcr.io/buildpacks/builder:v1'
-      - '--no-cache'
+      - '--clear-cache'
 
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/resume-builder:latest'
