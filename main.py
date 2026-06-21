@@ -27,7 +27,6 @@ except LookupError:
 
 # --- Configuration ---
 model = SentenceTransformer('all-MiniLM-L6-v2')
-fit_weights = {'semantic_skills_weight': 7, 'semantic_responsibilities_weight': 4, 'soft_skills_weight': 3, 'keyword_skills_weight': 2, 'keyword_responsibilities_weight': 1, 'job_title_weight': 10}
 soft_skills_keywords = {
     'communication': ['communication', 'articulate', 'present', 'written', 'verbal', 'negotiation', 'interpersonal'],
     'teamwork': ['teamwork', 'collaborate', 'cooperate', 'team player', 'cross-functional'],
@@ -54,7 +53,7 @@ def firebase_auth_required(allow_admin_only=False):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             auth_header = request.headers.get('Authorization')
-            # FIXED: Added index to extract the token string from the split list
+            # FIXED: Added to extract the token string from the split result
             id_token = auth_header.split('Bearer ') if auth_header and auth_header.startswith('Bearer ') else request.form.get('demo_auth_token')
             if not id_token: return jsonify({'error': 'Unauthorized'}), 401
             decoded_token = verify_firebase_token(id_token)
@@ -65,7 +64,7 @@ def firebase_auth_required(allow_admin_only=False):
 
 # --- Utilities ---
 def parse_resume(file_path):
-    # FIXED: Added to access extension string
+    # FIXED: Added to access only the extension part of the tuple
     ext = os.path.splitext(file_path).lower()
     if ext == '.docx':
         from docx import Document
@@ -78,13 +77,13 @@ def parse_resume(file_path):
 def parse_job_description(text):
     info = {'Job Title': 'N/A', 'Required Skills': [], 'Responsibilities': []}
     title = re.search(r"(Job Title|Role|Position)[:\s]*([A-Za-z0-9\s-\&,/()]+?)(?:\n|$)", text, re.IGNORECASE)
-    # FIXED: Accessed index of the list before stripping
+    # FIXED: Accessed the first row of the list, not the whole list
     lines = text.strip().split('\n')
     info['Job Title'] = title.group(2).strip() if title else (lines.strip() if lines else 'N/A')
     return info
 
 def run_resume_agent_api(file_bytes, filename, jd_text):
-    # FIXED: Added to access extension string
+    # FIXED: Added to access only the extension part of the tuple
     ext = os.path.splitext(filename).lower()
     path = f"/tmp/{os.urandom(24).hex()}{ext}"
     with open(path, 'wb') as f: f.write(file_bytes)
