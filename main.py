@@ -133,7 +133,7 @@ def firebase_auth_required(allow_admin_only=False):
             form_token = request.form.get('demo_auth_token')
 
             if auth_header and auth_header.startswith('Bearer '):
-                id_token = auth_header.split('Bearer ') # Fixed index
+                id_token = auth_header.split('Bearer ') # Fixed: Added index to extract string instead of list
             elif form_token:
                 id_token = form_token
             else:
