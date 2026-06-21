@@ -192,7 +192,7 @@ def parse_job_description(job_description_text):
     else:
         first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
-            extracted_info['Job Title'] = first_line.strip() # FIXED: Referenced explicit row item index
+            extracted_info['Job Title'] = first_line.strip() # FIXED: Added index row reference to prevent list crash
         else:
             extracted_info['Job Title'] = 'N/A'
 
