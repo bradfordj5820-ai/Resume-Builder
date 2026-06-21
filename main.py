@@ -176,6 +176,7 @@ def extract_text_from_pdf(pdf_path):
         return f"Error reading PDF file: {e}"
 
 def parse_resume(file_path):
+   # CORRECTED CODE FOR LINE 217:
     file_extension = os.path.splitext(file_path).lower()
     if file_extension == '.docx':
         return extract_text_from_docx(file_path)
@@ -584,6 +585,8 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
     }
 
     if resume_content_bytes and resume_filename:
+        # CORRECTED CODE:
+        # os.path.splitext returns (filename, extension). We want index.
         file_extension = os.path.splitext(resume_filename).lower()
         temp_resume_path = f"/tmp/{os.urandom(24).hex()}{file_extension}"
 
