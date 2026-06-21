@@ -70,8 +70,44 @@ def render_ui():
 def analyze():
     file = request.files.get('resume_file')
     jd = request.form.get('job_description')
+    
     if not file or not jd:
         return jsonify({'error': 'Missing input'}), 400
+    
+    # 1. Save file temporarily
+    temp_path = os.path.join('/tmp', file.filename)
+    file.save(temp_path)
+    
+    try:
+        # 2. Process via your existing engine
+        # Ensure your resume_engine.py returns a dictionary of results
+        analysis_results = analyze_resume(temp_path, jd)
+        
+        # 3. Log to Sheets
+        # Ensure your sheets_manager.py handles the API connection
+        update_results_sheet(analysis_results)
+        
+        # 4. Return results UI
+        return f'''
+        <body class="bg-light py-5">
+            <div class="container" style="max-width: 600px;">
+                <div class="card shadow p-4">
+                    <h3 class="text-success">✅ Analysis Complete</h3>
+                    <hr>
+                    <p><strong>Job Title Analyzed:</strong> {analysis_results.get('job_title', 'N/A')}</p>
+                    <p><strong>Match Score:</strong> {analysis_results.get('score', 'N/A')}</p>
+                    <br>
+                    <a href="/" class="btn btn-outline-primary w-100">Analyze Another</a>
+                </div>
+            </div>
+        </body>
+        '''
+    except Exception as e:
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+    finally:
+        # Clean up temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
     
     # Run your logic
     results = run_minimal_api(file.filename, jd)
