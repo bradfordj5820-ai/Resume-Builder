@@ -126,7 +126,7 @@ def firebase_auth_required(allow_admin_only=False):
             form_token = request.form.get('demo_auth_token')
 
             if auth_header and auth_header.startswith('Bearer '):
-                id_token = auth_header.split('Bearer ') # FIXED: Extracts string instead of list
+                id_token = auth_header.split('Bearer ') # Fixed: Index extraction
             elif form_token:
                 id_token = form_token
             else:
@@ -192,7 +192,7 @@ def parse_job_description(job_description_text):
     else:
         first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
-            extracted_info['Job Title'] = first_line.strip() # FIXED: Added index row reference to prevent list crash
+            extracted_info['Job Title'] = first_line.strip() # Fixed: List row target
         else:
             extracted_info['Job Title'] = 'N/A'
 
