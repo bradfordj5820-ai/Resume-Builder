@@ -168,8 +168,36 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
 app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
-def index():
-    return "Resume Agent is running."
+def render_ui():
+    # This renders your HTML form so you can actually upload files
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Resume Agent Dashboard</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    </head>
+    <body class="bg-light py-5">
+        <div class="container" style="max-width: 800px;">
+            <div class="card shadow-sm p-4">
+                <h2 class="mb-4 text-primary">📄 Resume Agent Optimizer</h2>
+                <form action="/analyze_resume" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="demo_auth_token" value="FAKE_FIREBASE_ID_TOKEN_FOR_DEMO">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">1. Upload Resume (.pdf or .docx)</label>
+                        <input type="file" name="resume_file" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">2. Paste Job Description</label>
+                        <textarea name="job_description" class="form-control" rows="8" placeholder="Paste requirements here..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg w-100">Analyze Candidate Fit</button>
+                </form>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
 
 @app.route('/analyze_resume', methods=['POST'])
 @firebase_auth_required()
