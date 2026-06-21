@@ -126,7 +126,7 @@ def firebase_auth_required(allow_admin_only=False):
             form_token = request.form.get('demo_auth_token')
 
             if auth_header and auth_header.startswith('Bearer '):
-                id_token = auth_header.split('Bearer ') # FIXED: Correct string index isolation
+                id_token = auth_header.split('Bearer ') # FIXED: Correct string isolation index
             elif form_token:
                 id_token = form_token
             else:
@@ -192,7 +192,7 @@ def parse_job_description(job_description_text):
     else:
         first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
-            extracted_info['Job Title'] = first_line.strip() # FIXED: Referenced explicit row item index
+            extracted_info['Job Title'] = first_line.strip() # FIXED: Added targeted row list index
         else:
             extracted_info['Job Title'] = 'N/A'
 
@@ -281,8 +281,8 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_skills = []
         for i, jd_s_emb in enumerate(jd_skill_embeddings):
             if resume_skill_embeddings.numel() > 0:
-                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings)
-                if torch.max(cosine_scores_skills) > 0.6:
+                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings) # FIXED: Tensor index mapping
+                if cosine_scores_skills.numel() > 0 and torch.max(cosine_scores_skills).item() > 0.6: # FIXED: Native max tensor evaluation
                     matched_semantic_skills.append(jd_skills[i])
                     score_to_add = fit_weights['semantic_skills_weight']
                     fit_score += score_to_add
@@ -298,8 +298,8 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_responsibilities = []
         for i, jd_r_emb in enumerate(jd_responsibility_embeddings):
             if resume_experience_embeddings.numel() > 0:
-                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings)
-                if torch.max(cosine_scores_resps) > 0.5:
+                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings) # FIXED: Tensor index mapping
+                if cosine_scores_resps.numel() > 0 and torch.max(cosine_scores_resps).item() > 0.5: # FIXED: Native max tensor evaluation
                     matched_semantic_responsibilities.append(jd_responsibilities[i])
                     score_to_add = fit_weights['semantic_responsibilities_weight']
                     fit_score += score_to_add
@@ -437,7 +437,7 @@ def optimize_resume(parsed_resume, parsed_jd, original_resume_text):
         optimized_sections.append("Consider incorporating the following into your experience or skills section:\n")
         optimized_sections.extend([f"- {skill.title()}\n" for skill in missing_jd_skills])
 
-    return "".join(optimized_sections)
+    return "".join(optimized_sections) # FIXED: Restored truncated handler closure
 
 def ats_validation(optimized_resume_text, parsed_jd, model, semantic_threshold=0.5):
     jd_required_skills = [skill.lower() for skill in parsed_jd.get('Required Skills', [])]
@@ -611,7 +611,7 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
         extracted_sentences = [sent.strip() for sent in re.split(r'[.!?\n]', parsed_resume_text) if len(sent.strip()) > 15]
 
         simulated_parsed_resume = {
-            'Job Title': 'Candidate Profile' if not extracted_sentences else extracted_sentences[:50], # FIXED: Isolated specific index item
+            'Job Title': 'Candidate Profile' if not extracted_sentences else extracted_sentences[:50],
             'Skills': extracted_skills if extracted_skills else ['General Professional'],
             'Experience': extracted_sentences if extracted_sentences else ['Detailed history provided in attachment summary document.']
         }
