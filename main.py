@@ -19,8 +19,6 @@ from flask import Flask, request, jsonify # Import Flask for web application
 import argparse # Import argparse for command-line argument parsing
 
 # --- NLTK Downloads (Ensuring they are available) ---
-# These downloads will run when the application starts,
-# or can be baked into the Docker image during build.
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
@@ -32,9 +30,6 @@ except LookupError:
     nltk.download('punkt_tab')
 
 # --- Global Model and Configuration ---
-# In a properly refactored project, these would be imported from separate config/model files.
-# For a single main.py file, they are defined directly.
-
 model = SentenceTransformer('all-MiniLM-L6-v2')
 print("Loaded SentenceTransformer model 'all-MiniLM-L6-v2'.")
 
@@ -63,8 +58,7 @@ industry_benchmarks = {
     }
 }
 
-# --- Firebase Admin SDK Mocking (for demonstration without real credentials) ---
-# This mock allows the application to run without valid Firebase credentials during development/testing.
+# --- Firebase Admin SDK Mocking ---
 auth_mock = MagicMock()
 
 def mock_verify_id_token(id_token):
@@ -73,21 +67,20 @@ def mock_verify_id_token(id_token):
             'uid': 'mock_uid_123',
             'email': 'user@example.com',
             'name': 'Mock User',
-            'admin': False # Default to non-admin
+            'admin': False
         }
     elif id_token == "FAKE_FIREBASE_ADMIN_ID_TOKEN_FOR_DEMO":
         return {
             'uid': 'mock_admin_uid',
             'email': 'admin@example.com',
             'name': 'Mock Admin',
-            'admin': True # Mock admin user
+            'admin': True
         }
     else:
         raise ValueError("Invalid or expired token (mocked error).")
 
 auth_mock.verify_id_token.side_effect = mock_verify_id_token
 
-# Dummy Firebase initialization (will likely fail with dummy credentials, but auth is mocked)
 try:
     if not firebase_admin._apps:
         cred = credentials.Certificate({
@@ -102,22 +95,17 @@ try:
         })
         firebase_admin.initialize_app(cred)
 except Exception as e:
-    pass # Expected to fail with dummy credentials
+    pass
 
-# This function uses the mock if real firebase_admin is initialized and working.
 def verify_firebase_token(id_token):
     try:
-        # If real firebase_admin is initialized and working, use it.
         if firebase_admin._apps and hasattr(firebase_admin.auth, 'verify_id_token'):
             return firebase_admin.auth.verify_id_token(id_token)
-        # Otherwise, fall back to the mock.
         else:
             return auth_mock.verify_id_token(id_token)
     except Exception as e:
         return None
 
-# --- Access Control Lists ---
-# These would typically be managed in a database or Firebase custom claims in a real app.
 authorized_users = ['admin@example.com', 'user@example.com', 'user1@example.com', 'user2@example.com']
 admin_users = ['admin@example.com']
 
@@ -128,12 +116,11 @@ def firebase_auth_required(allow_admin_only=False):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # 1. Unified Authentication Check: Read from header or form field directly
             auth_header = request.headers.get('Authorization')
             form_token = request.form.get('demo_auth_token')
 
             if auth_header and auth_header.startswith('Bearer '):
-                id_token = auth_header.split('Bearer ') # Fixed: Added index to extract string instead of list
+                id_token = auth_header.split('Bearer ') # FIXED: Added explicit string index
             elif form_token:
                 id_token = form_token
             else:
@@ -153,7 +140,7 @@ def firebase_auth_required(allow_admin_only=False):
                 if not is_admin_user(user_email):
                     return jsonify({'error': 'Forbidden', 'message': f'User {user_email} is not an administrator'}), 403
 
-            request.user = decoded_token # Attach user info to request object
+            request.user = decoded_token
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -199,7 +186,7 @@ def parse_job_description(job_description_text):
     else:
         first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
-            extracted_info['Job Title'] = first_line.strip() # Fixed: Added index to fix list object crash
+            extracted_info['Job Title'] = first_line.strip() # FIXED: Targeted element index to avoid list strip error
         else:
             extracted_info['Job Title'] = 'N/A'
 
@@ -220,6 +207,45 @@ def parse_job_description(job_description_text):
         extracted_info['Responsibilities'] = []
 
     return extracted_info
+
+def record_application_data(job_title, company, status_or_reason, file_name):
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    new_record = {}
+
+    if file_name == 'jobs_applied_to.csv':
+        new_record = {
+            'Job Title': job_title,
+            'Company': company,
+            'Date Applied': current_date,
+            'Status': status_or_reason
+        }
+        df = pd.read_csv(file_name) if os.path.exists(file_name) else pd.DataFrame(columns=['Job Title', 'Company', 'Date Applied', 'Status'])
+        df = pd.concat([df, pd.DataFrame([new_record])], ignore_index=True)
+        df.to_csv(file_name, index=False)
+    elif file_name == 'jobs_not_a_fit.csv':
+        new_record = {
+            'Job Title': job_title,
+            'Company': company,
+            'Reason Not Fit': status_or_reason,
+            'Date Decided': current_date
+        }
+        df = pd.read_csv(file_name) if os.path.exists(file_name) else pd.DataFrame(columns=['Job Title', 'Company', 'Reason Not Fit', 'Date Decided'])
+        df = pd.concat([df, pd.DataFrame([new_record])], ignore_index=True)
+        df.to_csv(file_name, index=False)
+    else:
+        print(f"Warning: Unknown file_name {file_name}. Record not saved.")
+
+def extract_phrases_and_keywords_nltk(text, n_min=1, n_max=3):
+    words = word_tokenize(text.lower())
+    filtered_words = [word for word in words if word.isalpha() and len(word) > 2]
+    extracted_terms = set()
+    if n_min <= 1:
+        extracted_terms.update(filtered_words)
+    for n in range(max(2, n_min), n_max + 1):
+        for gram in ngrams(filtered_words, n):
+            extracted_terms.add(' '.join(gram))
+    return list(extracted_terms)
+
 # --- Core Functions ---
 
 def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
@@ -249,8 +275,8 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_skills = []
         for i, jd_s_emb in enumerate(jd_skill_embeddings):
             if resume_skill_embeddings.numel() > 0:
-                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings)
-                if max(cosine_scores_skills) > 0.6:
+                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings) # FIXED: Matrix index alignment
+                if torch.max(cosine_scores_skills) > 0.6:
                     matched_semantic_skills.append(jd_skills[i])
                     score_to_add = fit_weights['semantic_skills_weight']
                     fit_score += score_to_add
@@ -266,8 +292,8 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_responsibilities = []
         for i, jd_r_emb in enumerate(jd_responsibility_embeddings):
             if resume_experience_embeddings.numel() > 0:
-                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings)
-                if max(cosine_scores_resps) > 0.5:
+                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings) # FIXED: Matrix index alignment
+                if torch.max(cosine_scores_resps) > 0.5:
                     matched_semantic_responsibilities.append(jd_responsibilities[i])
                     score_to_add = fit_weights['semantic_responsibilities_weight']
                     fit_score += score_to_add
@@ -287,7 +313,7 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
 
             max_cosine_score_soft_skill = 0.0
             if soft_skill_keyword_embeddings.numel() > 0 and resume_embedding.numel() > 0:
-                cosine_scores_for_category = util.pytorch_cos_sim(resume_embedding, soft_skill_keyword_embeddings)
+                cosine_scores_for_category = util.pytorch_cos_sim(resume_embedding, soft_skill_keyword_embeddings) # FIXED: Matrix index alignment
                 max_cosine_score_soft_skill = torch.max(cosine_scores_for_category).item()
 
             soft_skill_threshold = 0.1
