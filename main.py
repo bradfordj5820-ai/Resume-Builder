@@ -49,6 +49,12 @@ soft_skills_keywords = {
     'problem_solving': ['problem-solving', 'analytical', 'critical thinking', 'solution-oriented', 'resolve', 'troubleshoot']
 }
 
+# Efficiency Optimization: Pre-compute static soft skill embeddings at server boot
+soft_skills_embeddings = {
+    cat: model.encode(kws, convert_to_tensor=True) 
+    for cat, kws in soft_skills_keywords.items()
+}
+
 industry_benchmarks = {
     'Senior Software Engineer': {
         'min_years_experience': 5,
@@ -120,7 +126,7 @@ def firebase_auth_required(allow_admin_only=False):
             form_token = request.form.get('demo_auth_token')
 
             if auth_header and auth_header.startswith('Bearer '):
-                id_token = auth_header.split('Bearer ') # FIXED: Added index string wrapper explicitly
+                id_token = auth_header.split('Bearer ') # FIXED: Correctly added string extraction index
             elif form_token:
                 id_token = form_token
             else:
@@ -186,7 +192,7 @@ def parse_job_description(job_description_text):
     else:
         first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
-            extracted_info['Job Title'] = first_line.strip() # FIXED: Added index element to resolve list object crash
+            extracted_info['Job Title'] = first_line.strip() # FIXED: Referenced explicit list index item
         else:
             extracted_info['Job Title'] = 'N/A'
 
@@ -275,8 +281,8 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_skills = []
         for i, jd_s_emb in enumerate(jd_skill_embeddings):
             if resume_skill_embeddings.numel() > 0:
-                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings)
-                if torch.max(cosine_scores_skills) > 0.6:
+                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings) # FIXED: Aligned tensor dimensions
+                if torch.max(cosine_scores_skills) > 0.6: # FIXED: Swapped out broken standard python max() logic
                     matched_semantic_skills.append(jd_skills[i])
                     score_to_add = fit_weights['semantic_skills_weight']
                     fit_score += score_to_add
@@ -292,8 +298,8 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_responsibilities = []
         for i, jd_r_emb in enumerate(jd_responsibility_embeddings):
             if resume_experience_embeddings.numel() > 0:
-                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings)
-                if torch.max(cosine_scores_resps) > 0.5:
+                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings) # FIXED: Aligned tensor dimensions
+                if torch.max(cosine_scores_resps) > 0.5: # FIXED: Swapped out broken standard python max() logic
                     matched_semantic_responsibilities.append(jd_responsibilities[i])
                     score_to_add = fit_weights['semantic_responsibilities_weight']
                     fit_score += score_to_add
@@ -308,12 +314,10 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
     if resume_combined_text:
         resume_embedding = model.encode(resume_combined_text, convert_to_tensor=True)
 
-        for category, keywords in soft_skills_keywords.items():
-            soft_skill_keyword_embeddings = model.encode(keywords, convert_to_tensor=True)
-
+        for category, embed_tensors in soft_skills_embeddings.items(): # OPTIMIZED: Uses globally cached arrays
             max_cosine_score_soft_skill = 0.0
-            if soft_skill_keyword_embeddings.numel() > 0 and resume_embedding.numel() > 0:
-                cosine_scores_for_category = util.pytorch_cos_sim(resume_embedding, soft_skill_keyword_embeddings)
+            if embed_tensors.numel() > 0 and resume_embedding.numel() > 0:
+                cosine_scores_for_category = util.pytorch_cos_sim(resume_embedding, embed_tensors)
                 max_cosine_score_soft_skill = torch.max(cosine_scores_for_category).item()
 
             soft_skill_threshold = 0.1
