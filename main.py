@@ -128,16 +128,17 @@ def firebase_auth_required(allow_admin_only=False):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-# 1. Fallback Authentication Check: Read from header or form field directly
-    auth_header = request.headers.get('Authorization')
-    form_token = request.form.get('demo_auth_token')
+            # 1. Unified Authentication Check: Read from header or form field directly
+            auth_header = request.headers.get('Authorization')
+            form_token = request.form.get('demo_auth_token')
 
-    if auth_header and auth_header.startswith('Bearer '):
-        id_token = auth_header.split('Bearer ')
-    elif form_token:
-        id_token = form_token
-    else:
-        return jsonify({'error': 'Unauthorized', 'message': 'Authorization token missing'}), 401
+            if auth_header and auth_header.startswith('Bearer '):
+                id_token = auth_header.split('Bearer ') # Fixed index
+            elif form_token:
+                id_token = form_token
+            else:
+                return jsonify({'error': 'Unauthorized', 'message': 'Authorization token missing'}), 401
+            
             decoded_token = verify_firebase_token(id_token)
 
             if decoded_token is None:
@@ -182,7 +183,7 @@ def extract_text_from_pdf(pdf_path):
         return f"Error reading PDF file: {e}"
 
 def parse_resume(file_path):
-    file_extension = os.path.splitext(file_path)[1].lower()
+    file_extension = os.path.splitext(file_path).lower()
     if file_extension == '.docx':
         return extract_text_from_docx(file_path)
     elif file_extension == '.pdf':
@@ -192,12 +193,11 @@ def parse_resume(file_path):
 
 def parse_job_description(job_description_text):
     extracted_info = {}
-    # FIX: Escaped the '&' character in the regex pattern to prevent 'bad character range' error.
     job_title_match = re.search(r"(Job Title|Role|Position)[:\s]*([A-Za-z0-9\s-\&,/()]+?)(?:\n|$)", job_description_text, re.IGNORECASE)
     if job_title_match:
         extracted_info['Job Title'] = job_title_match.group(2).strip()
     else:
-        first_line = job_description_text.strip().split('\n')[0]
+        first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
             extracted_info['Job Title'] = first_line.strip()
         else:
@@ -288,7 +288,7 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_skills = []
         for i, jd_s_emb in enumerate(jd_skill_embeddings):
             if resume_skill_embeddings.numel() > 0:
-                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings)[0]
+                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings)
                 if max(cosine_scores_skills) > 0.6:
                     matched_semantic_skills.append(jd_skills[i])
                     score_to_add = fit_weights['semantic_skills_weight']
@@ -305,7 +305,7 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_responsibilities = []
         for i, jd_r_emb in enumerate(jd_responsibility_embeddings):
             if resume_experience_embeddings.numel() > 0:
-                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings)[0]
+                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings)
                 if max(cosine_scores_resps) > 0.5:
                     matched_semantic_responsibilities.append(jd_responsibilities[i])
                     score_to_add = fit_weights['semantic_responsibilities_weight']
@@ -326,11 +326,10 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
 
             max_cosine_score_soft_skill = 0.0
             if soft_skill_keyword_embeddings.numel() > 0 and resume_embedding.numel() > 0:
-                cosine_scores_for_category = util.pytorch_cos_sim(resume_embedding, soft_skill_keyword_embeddings)[0]
+                cosine_scores_for_category = util.pytorch_cos_sim(resume_embedding, soft_skill_keyword_embeddings)
                 max_cosine_score_soft_skill = torch.max(cosine_scores_for_category).item()
 
             soft_skill_threshold = 0.1
-
 
             if max_cosine_score_soft_skill > soft_skill_threshold:
                 matched_semantic_soft_skills_categories.add(category)
@@ -584,7 +583,6 @@ def benchmark_candidate(parsed_resume, job_title, benchmarks):
 
 # --- Orchestrator Function (adapted for web API) ---
 def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_text):
-    # Define file paths for application data (can be made dynamic or configured via environment variables)
     jobs_applied_to_file_path = 'jobs_applied_to.csv'
     jobs_not_a_fit_file_path = 'jobs_not_a_fit.csv'
 
@@ -594,10 +592,9 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
         "results": {}
     }
 
-    # 1. Parse Resume from uploaded content
     if resume_content_bytes and resume_filename:
-        file_extension = os.path.splitext(resume_filename)[1].lower()
-        temp_resume_path = f"/tmp/{os.urandom(24).hex()}{file_extension}" # Use /tmp for Cloud Run
+        file_extension = os.path.splitext(resume_filename).lower()
+        temp_resume_path = f"/tmp/{os.urandom(24).hex()}{file_extension}"
 
         try:
             with open(temp_resume_path, 'wb') as f:
@@ -612,9 +609,6 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
             response_data["message"] = f"Error parsing uploaded resume: {parsed_resume_text}"
             return response_data
 
-        # For API, we'll return the full text for simplicity or a processed dict
-        # For this prototype, we'll use a simulated structured resume for consistency with notebook demos.
-        # In a production system, parse_resume would return structured data.
         simulated_parsed_resume = {
             'Job Title': 'Software Developer',
             'Skills': ['Python', 'Java', 'AWS', 'Microservices', 'Problem Solving'],
@@ -628,7 +622,6 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
         response_data["message"] = "No resume file provided."
         return response_data
 
-    # 2. Parse Job Description
     parsed_jd = parse_job_description(job_description_text)
     if not parsed_jd or parsed_jd.get('Job Title') == 'N/A' and not parsed_jd.get('Required Skills'):
         response_data["status"] = "error"
@@ -636,35 +629,28 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
         return response_data
     response_data["results"]["parsed_job_description"] = parsed_jd
 
-    # 3. Assess Candidate Fit (Semantic)
     fit_assessment_semantic = assess_candidate_fit_semantic(simulated_parsed_resume, parsed_jd, model, fit_weights)
     response_data["results"]["fit_assessment_semantic"] = fit_assessment_semantic
 
-    # 3b. Assess Candidate Fit (ML Placeholder)
     fit_assessment_ml = predict_fit_score_ml(simulated_parsed_resume, parsed_jd)
     response_data["results"]["fit_assessment_ml_placeholder"] = fit_assessment_ml
 
-    # 3c. Benchmarking Against Industry Standards
     job_title_for_benchmark = parsed_jd.get('Job Title', 'Unknown').strip()
     benchmark_assessment = benchmark_candidate(simulated_parsed_resume, job_title_for_benchmark, industry_benchmarks)
     response_data["results"]["benchmark_assessment"] = benchmark_assessment
 
-    # For overall decision, use semantic for optimization/recording
     fit_assessment = fit_assessment_semantic
 
-    # 4. Optimize Resume
     optimized_resume_output = optimize_resume(simulated_parsed_resume, parsed_jd, parsed_resume_text)
     response_data["results"]["optimized_resume_output"] = optimized_resume_output
 
-    # 5. Perform ATS Validation
     ats_assessment = ats_validation(optimized_resume_output, parsed_jd, model)
     response_data["results"]["ats_assessment"] = ats_assessment
 
-    # 6. Record Application Data
     job_title_jd = parsed_jd.get('Job Title', 'Unknown Job')
-    company_name = parsed_jd.get('Company', 'Sample Company') # Assuming company could be parsed or defaulted
+    company_name = parsed_jd.get('Company', 'Sample Company')
 
-    if fit_assessment['fit_score'] >= 20: # Arbitrary threshold for a 'fit'
+    if fit_assessment['fit_score'] >= 20:
         record_application_data(job_title_jd, company_name, 'Applied', jobs_applied_to_file_path)
         response_data["message"] += f" Recorded job as 'Applied' for {job_title_jd} at {company_name}."
     else:
@@ -673,13 +659,11 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
 
     return response_data
 
-
 # --- Flask Application Setup ---
 app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def render_ui():
-    # This route is completely public so anyone can open it in a browser window
     return '''
     <!DOCTYPE html>
     <html>
@@ -713,20 +697,8 @@ def render_ui():
     '''
 
 @app.route('/analyze_resume', methods=['POST'])
+@firebase_auth_required(allow_admin_only=False)
 def analyze_resume():
-    # 1. Fallback Authentication Check: Look for the token in the form or the headers
-    auth_header = request.headers.get('Authorization') or request.form.get('demo_auth_token')
-    
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return jsonify({'error': 'Unauthorized', 'message': 'Authorization token missing'}), 401
-
-    id_token = auth_header.split('Bearer ')
-    decoded_token = verify_firebase_token(id_token)
-
-    if decoded_token is None:
-        return jsonify({'error': 'Unauthorized', 'message': 'Invalid token'}), 401
-
-    # 2. File and Form Validation
     if 'resume_file' not in request.files:
         return jsonify({'error': 'Bad Request', 'message': 'No resume file provided'}), 400
     if 'job_description' not in request.form:
@@ -738,7 +710,6 @@ def analyze_resume():
     if resume_file.filename == '':
         return jsonify({'error': 'Bad Request', 'message': 'No selected resume file'}), 400
 
-    # 3. Processing
     resume_content_bytes = resume_file.read()
     resume_filename = resume_file.filename
 
