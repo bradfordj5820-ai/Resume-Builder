@@ -70,7 +70,31 @@ def analyze():
     jd = request.form.get('job_description')
     if not file or not jd:
         return jsonify({'error': 'Missing input'}), 400
-    return jsonify(run_minimal_api(file.filename, jd))
+    
+    # Run your logic
+    results = run_minimal_api(file.filename, jd)
+    
+    # Return a clean HTML dashboard instead of raw JSON
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    </head>
+    <body class="bg-light py-5">
+        <div class="container" style="max-width: 600px;">
+            <div class="card shadow p-4">
+                <h3 class="text-success">✅ Analysis Complete</h3>
+                <hr>
+                <p><strong>Detected File Type:</strong> {results['extension'].upper()}</p>
+                <p><strong>Job Title Found:</strong> {results['job_title']}</p>
+                <br>
+                <a href="/" class="btn btn-outline-primary w-100">Analyze Another</a>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
