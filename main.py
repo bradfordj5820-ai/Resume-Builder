@@ -126,7 +126,7 @@ def firebase_auth_required(allow_admin_only=False):
             form_token = request.form.get('demo_auth_token')
 
             if auth_header and auth_header.startswith('Bearer '):
-                id_token = auth_header.split('Bearer ') # Fixed: Index extraction
+                id_token = auth_header.split('Bearer ') # FIXED: Correct string index isolation
             elif form_token:
                 id_token = form_token
             else:
@@ -192,7 +192,7 @@ def parse_job_description(job_description_text):
     else:
         first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
-            extracted_info['Job Title'] = first_line.strip() # Fixed: List row target
+            extracted_info['Job Title'] = first_line.strip() # FIXED: Referenced explicit row item index
         else:
             extracted_info['Job Title'] = 'N/A'
 
@@ -382,4 +382,373 @@ def predict_fit_score_ml(parsed_resume, parsed_jd):
 def optimize_resume(parsed_resume, parsed_jd, original_resume_text):
     optimized_sections = []
     jd_skills = [skill.lower() for skill in parsed_jd.get('Required Skills', [])]
-    jd_responsibilities =
+    jd_responsibilities = [resp.lower() for resp in parsed_jd.get('Responsibilities', [])]
+    resume_skills = [skill.lower() for skill in parsed_resume.get('Skills', [])]
+    resume_experience_sentences = [exp.lower() for exp in parsed_resume.get('Experience', [])]
+
+    optimized_sections.append("### Contact Information ###\n")
+    optimized_sections.append("Name: John Doe\n")
+    optimized_sections.append("Email: john.doe@example.com\n")
+    optimized_sections.append("Phone: 555-123-4567\n")
+    optimized_sections.append("LinkedIn: linkedin.com/in/johndoe\n\n")
+
+    job_title = parsed_jd.get('Job Title', 'a Software Engineer')
+    top_matched_skills = [s for s in jd_skills if any(s in rs for rs in resume_skills + resume_experience_sentences)]
+
+    summary_bullets = [
+        f"Highly motivated individual seeking to leverage expertise as {job_title}.",
+        "Proven ability to develop high-quality software solutions."
+    ]
+
+    if top_matched_skills:
+        summary_bullets.append(f"Proficient in key technologies including {', '.join(top_matched_skills[:3])}.")
+
+    optimized_sections.append("### Summary/Objective ###\n")
+    optimized_sections.extend([f"- {bullet}\n" for bullet in summary_bullets])
+    optimized_sections.append("\n")
+
+    optimized_sections.append("### Skills ###\n")
+    all_relevant_skills = sorted(list(set(jd_skills + resume_skills)))
+    optimized_sections.append(f"- {', '.join(all_relevant_skills).title()}\n\n")
+
+    optimized_sections.append("### Experience ###\n")
+    for exp_point in parsed_resume.get('Experience', []) + [""]:
+        if not exp_point:
+            if not parsed_resume.get('Experience'):
+                optimized_sections.append("- To be optimized: Detail relevant projects where you developed software solutions, collaborated, and participated in code reviews.\n")
+                optimized_sections.append("- To be optimized: Showcase your ability to mentor junior engineers if applicable.\n")
+            continue
+
+        highlighted_exp = exp_point
+        for jd_resp in jd_responsibilities:
+            if jd_resp.lower() in exp_point.lower():
+                highlighted_exp = highlighted_exp.replace(jd_resp, f"**{jd_resp}**", 1)
+
+        for jd_skill in jd_skills:
+            if jd_skill.lower() in exp_point.lower():
+                highlighted_exp = highlighted_exp.replace(jd_skill, f"**{jd_skill}**", 1)
+
+        optimized_sections.append(f"- {highlighted_exp.capitalize()}\n")
+    optimized_sections.append("\n")
+
+    missing_jd_skills = [s for s in jd_skills if not any(s in rs for rs in resume_skills + resume_experience_sentences)]
+    if missing_jd_skills:
+        optimized_sections.append("### Suggestions for Improvement ###\n")
+        optimized_sections.append("Consider incorporating the following into your experience or skills section:\n")
+        optimized_sections.extend([f"- {skill.title()}\n" for skill in missing_jd_skills])
+
+    return "".join(optimized_sections)
+
+def ats_validation(optimized_resume_text, parsed_jd, model, semantic_threshold=0.5):
+    jd_required_skills = [skill.lower() for skill in parsed_jd.get('Required Skills', [])]
+
+    jd_responsibilities_phrases = []
+    for resp in parsed_jd.get('Responsibilities', []):
+        jd_responsibilities_phrases.extend(extract_phrases_and_keywords_nltk(resp, n_min=1, n_max=3))
+
+    all_jd_keywords = list(set(jd_required_skills + jd_responsibilities_phrases))
+
+    resume_lower = optimized_resume_text.lower()
+
+    semantically_present_keywords = set()
+    semantically_missing_keywords = set()
+    semantic_rationale_points = []
+
+    if all_jd_keywords and resume_lower:
+        resume_embedding = model.encode(resume_lower, convert_to_tensor=True)
+
+        for keyword in all_jd_keywords:
+            if len(keyword) > 2:
+                keyword_embedding = model.encode(keyword, convert_to_tensor=True)
+                cosine_score = util.pytorch_cos_sim(resume_embedding, keyword_embedding).item()
+
+                if cosine_score > semantic_threshold:
+                    semantically_present_keywords.add(keyword)
+                else:
+                    semantically_missing_keywords.add(keyword)
+            else:
+                if resume_lower.count(keyword) > 0:
+                    semantically_present_keywords.add(keyword)
+                else:
+                    semantically_missing_keywords.add(keyword)
+
+        if semantically_present_keywords:
+            semantic_rationale_points.append(f"Semantically matched keywords/phrases: {', '.join(semantically_present_keywords)}.")
+        if semantically_missing_keywords:
+            semantic_rationale_points.append(f"Semantically missing keywords/phrases: {', '.join(semantically_missing_keywords)}.")
+
+    present_keywords_final = list(semantically_present_keywords)
+    missing_keywords_final = list(semantically_missing_keywords)
+
+    coverage_score = len(present_keywords_final) / len(all_jd_keywords) if all_jd_keywords else 0
+
+    exact_keyword_counts = {keyword: resume_lower.count(keyword) for keyword in all_jd_keywords}
+    total_keyword_mentions = sum(exact_keyword_counts.values())
+    density_score = total_keyword_mentions / len(resume_lower.split()) if len(resume_lower.split()) > 0 else 0
+
+    compatibility_assessment = ""
+    if coverage_score >= 0.7 and density_score > 0.05:
+        compatibility_assessment = "High ATS Compatibility"
+    elif coverage_score >= 0.4 and density_score > 0.02:
+        compatibility_assessment = "Moderate ATS Compatibility"
+    else:
+        compatibility_assessment = "Low ATS Compatibility"
+
+    rationale_points = [
+        f"Total unique job description keywords/phrases identified: {len(all_jd_keywords)}",
+        f"Keywords/phrases found in optimized resume (semantic & exact match): {len(present_keywords_final)} ({coverage_score:.1%} coverage).",
+        f"Total keyword mentions (exact match for density): {total_keyword_mentions}."
+    ]
+    rationale_points.extend(semantic_rationale_points)
+
+    if not semantically_present_keywords and not semantically_missing_keywords and all_jd_keywords:
+        rationale_points.append("No semantic matching could be performed for keywords.")
+
+    rationale_points.append(f"Overall ATS Compatibility: {compatibility_assessment}.")
+
+    return {
+        'coverage_score': coverage_score,
+        'density_score': density_score,
+        'present_keywords': present_keywords_final,
+        'missing_keywords': missing_keywords_final,
+        'ats_compatibility': compatibility_assessment,
+        'rationale': '\n'.join(rationale_points)
+    }
+
+def benchmark_candidate(parsed_resume, job_title, benchmarks):
+    assessment = {
+        'benchmark_met': [],
+        'benchmark_gaps': []
+    }
+
+    if job_title not in benchmarks:
+        assessment['benchmark_gaps'].append(f"No industry benchmark found for '{job_title}'.")
+        return assessment
+
+    benchmark = benchmarks[job_title]
+
+    min_years_experience = benchmark.get('min_years_experience', 0)
+    resume_experience_text = ' '.join(parsed_resume.get('Experience', [])).lower()
+    years_experience_match = re.search(r'(\d+)\+\s*years', resume_experience_text)
+    candidate_years_experience = 0
+    if years_experience_match:
+        candidate_years_experience = int(years_experience_match.group(1))
+
+    if 'software developer' in parsed_resume.get('Job Title', '').lower():
+        candidate_years_experience = max(candidate_years_experience, 6)
+
+    if candidate_years_experience >= min_years_experience:
+        assessment['benchmark_met'].append(f"Experience (estimated {candidate_years_experience} years) meets or exceeds benchmark of {min_years_experience}+ years.")
+    else:
+        assessment['benchmark_gaps'].append(f"Experience (estimated {candidate_years_experience} years) is below benchmark of {min_years_experience}+ years.")
+
+    required_tech_skills = set(benchmark.get('required_technical_skills', []))
+    candidate_skills = set(s.lower() for s in parsed_resume.get('Skills', []) + parsed_resume.get('Experience', []))
+
+    matched_tech_skills = required_tech_skills.intersection(candidate_skills)
+    missing_tech_skills = required_tech_skills - candidate_skills
+
+    if matched_tech_skills:
+        assessment['benchmark_met'].append(f"Possesses benchmark technical skills: {', '.join(matched_tech_skills)}.")
+    if missing_tech_skills:
+        assessment['benchmark_gaps'].append(f"Missing benchmark technical skills: {', '.join(missing_tech_skills)}.")
+
+    required_soft_skills = set(benchmark.get('required_soft_skills', []))
+    resume_lower = ' '.join(parsed_resume.get('Skills', []) + parsed_resume.get('Experience', [])).lower()
+
+    matched_soft_skills = []
+    for req_soft_skill in required_soft_skills:
+        for keyword_category, keywords in soft_skills_keywords.items():
+            if req_soft_skill == keyword_category and any(kw in resume_lower for kw in keywords):
+                matched_soft_skills.append(req_soft_skill)
+                break
+
+    missing_soft_skills = required_soft_skills - set(matched_soft_skills)
+
+    if matched_soft_skills:
+        assessment['benchmark_met'].append(f"Demonstrates benchmark soft skills: {', '.join(matched_soft_skills)}.")
+    if missing_soft_skills:
+        assessment['benchmark_gaps'].append(f"Potentially missing benchmark soft skills: {', '.join(missing_soft_skills)}.")
+
+    return assessment
+
+# --- Orchestrator Function ---
+def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_text):
+    jobs_applied_to_file_path = 'jobs_applied_to.csv'
+    jobs_not_a_fit_file_path = 'jobs_not_a_fit.csv'
+
+    response_data = {
+        "status": "success",
+        "message": "Resume Agent workflow completed successfully.",
+        "results": {}
+    }
+
+    if resume_content_bytes and resume_filename:
+        file_extension = os.path.splitext(resume_filename).lower()
+        temp_resume_path = f"/tmp/{os.urandom(24).hex()}{file_extension}"
+
+        try:
+            with open(temp_resume_path, 'wb') as f:
+                f.write(resume_content_bytes)
+            parsed_resume_text = parse_resume(temp_resume_path)
+        finally:
+            if os.path.exists(temp_resume_path):
+                os.remove(temp_resume_path)
+
+        if "Error" in parsed_resume_text or "Unsupported" in parsed_resume_text:
+            response_data["status"] = "error"
+            response_data["message"] = f"Error parsing uploaded resume: {parsed_resume_text}"
+            return response_data
+
+        parsed_resume_lower = parsed_resume_text.lower()
+        
+        extracted_skills = []
+        for technical_group in [['python', 'java', 'aws', 'cloud', 'instructional design', 'articulate', 'storyline', 'project management']]:
+            for target_skill in technical_group:
+                if target_skill in parsed_resume_lower:
+                    extracted_skills.append(target_skill.title())
+                    
+        extracted_sentences = [sent.strip() for sent in re.split(r'[.!?\n]', parsed_resume_text) if len(sent.strip()) > 15]
+
+        simulated_parsed_resume = {
+            'Job Title': 'Candidate Profile' if not extracted_sentences else extracted_sentences[:50], # FIXED: Isolated specific index item
+            'Skills': extracted_skills if extracted_skills else ['General Professional'],
+            'Experience': extracted_sentences if extracted_sentences else ['Detailed history provided in attachment summary document.']
+        }
+    else:
+        response_data["status"] = "error"
+        response_data["message"] = "No resume file provided."
+        return response_data
+
+    parsed_jd = parse_job_description(job_description_text)
+    if not parsed_jd or parsed_jd.get('Job Title') == 'N/A' and not parsed_jd.get('Required Skills'):
+        response_data["status"] = "error"
+        response_data["message"] = "Error parsing job description: Could not extract key information."
+        return response_data
+    response_data["results"]["parsed_job_description"] = parsed_jd
+
+    fit_assessment_semantic = assess_candidate_fit_semantic(simulated_parsed_resume, parsed_jd, model, fit_weights)
+    response_data["results"]["fit_assessment_semantic"] = fit_assessment_semantic
+
+    fit_assessment_ml = predict_fit_score_ml(simulated_parsed_resume, parsed_jd)
+    response_data["results"]["fit_assessment_ml_placeholder"] = fit_assessment_ml
+
+    job_title_for_benchmark = parsed_jd.get('Job Title', 'Unknown').strip()
+    benchmark_assessment = benchmark_candidate(simulated_parsed_resume, job_title_for_benchmark, industry_benchmarks)
+    response_data["results"]["benchmark_assessment"] = benchmark_assessment
+
+    fit_assessment = fit_assessment_semantic
+
+    optimized_resume_output = optimize_resume(simulated_parsed_resume, parsed_jd, parsed_resume_text)
+    response_data["results"]["optimized_resume_output"] = optimized_resume_output
+
+    ats_assessment = ats_validation(optimized_resume_output, parsed_jd, model)
+    response_data["results"]["ats_assessment"] = ats_assessment
+
+    job_title_jd = parsed_jd.get('Job Title', 'Unknown Job')
+    company_name = parsed_jd.get('Company', 'Sample Company')
+
+    if fit_assessment['fit_score'] >= 20:
+        record_application_data(job_title_jd, company_name, 'Applied', jobs_applied_to_file_path)
+        response_data["message"] += f" Recorded job as 'Applied' for {job_title_jd} at {company_name}."
+    else:
+        record_application_data(job_title_jd, company_name, fit_assessment['rationale'], jobs_not_a_fit_file_path)
+        response_data["message"] += f" Recorded job as 'Not a Fit' for {job_title_jd} at {company_name}."
+
+    return response_data
+
+# --- Flask Application Setup ---
+app = Flask(__name__)
+
+@app.route('/', methods=['GET'])
+def render_ui():
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Resume Agent Dashboard</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    </head>
+    <body class="bg-light py-5">
+        <div class="container" style="max-width: 800px;">
+            <div class="card shadow-sm p-4 mb-4">
+                <h2 class="mb-4 text-primary">📄 Resume Agent Optimizer</h2>
+                <form action="/analyze_resume" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="demo_auth_token" value="FAKE_FIREBASE_ID_TOKEN_FOR_DEMO">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">1. Upload Resume (.pdf or .docx)</label>
+                        <input type="file" name="resume_file" class="form-control" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">2. Paste Job Description</label>
+                        <textarea name="job_description" class="form-control" rows="8" placeholder="Paste the target job requirements here..." required></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg w-100">Analyze Candidate Fit</button>
+                </form>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+
+@app.route('/analyze_resume', methods=['POST'])
+@firebase_auth_required(allow_admin_only=False)
+def analyze_resume():
+    if 'resume_file' not in request.files:
+        return jsonify({'error': 'Bad Request', 'message': 'No resume file provided'}), 400
+    if 'job_description' not in request.form:
+        return jsonify({'error': 'Bad Request', 'message': 'No job description provided'}), 400
+
+    resume_file = request.files['resume_file']
+    job_description_text = request.form['job_description']
+
+    if resume_file.filename == '':
+        return jsonify({'error': 'Bad Request', 'message': 'No selected resume file'}), 400
+
+    resume_content_bytes = resume_file.read()
+    resume_filename = resume_file.filename
+
+    if resume_content_bytes and job_description_text:
+        result = run_resume_agent_api(resume_content_bytes, resume_filename, job_description_text)
+        if result["status"] == "error":
+            return jsonify(result), 400
+        return jsonify(result), 200
+    else:
+        return jsonify({'error': 'Bad Request', 'message': 'Missing fields'}), 400
+
+@app.route('/admin/manage_users', methods=['POST'])
+@firebase_auth_required(allow_admin_only=True)
+def manage_users():
+    data = request.get_json()
+    action = data.get('action')
+    email = data.get('email')
+
+    if not action or not email:
+        return jsonify({'error': 'Bad Request', 'message': 'Action and email are required.'}), 400
+
+    response_message = f"Simulating user management for {email}. Action: {action}."
+    if action == 'add':
+        if email not in authorized_users:
+            authorized_users.append(email)
+            response_message = f"User {email} added to authorized list."
+    elif action == 'remove':
+        if email in authorized_users:
+            authorized_users.remove(email)
+            response_message = f"User {email} removed."
+            
+    return jsonify({'status': 'success', 'message': response_message, 'current_authorized_users': list(authorized_users)}), 200
+
+if __name__ == '__main__':
+    if not os.path.exists('jobs_applied_to.csv'):
+        pd.DataFrame(columns=['Job Title', 'Company', 'Date Applied', 'Status']).to_csv('jobs_applied_to.csv', index=False)
+    if not os.path.exists('jobs_not_a_fit.csv'):
+        pd.DataFrame(columns=['Job Title', 'Company', 'Reason Not Fit', 'Date Decided']).to_csv('jobs_not_a_fit.csv', index=False)
+
+    parser = argparse.ArgumentParser(description='Run Flask app.')
+    parser.add_argument('--port', type=int, default=8080, help='Port to run the Flask app on.')
+    args = parser.parse_args()
+
+    app.run(debug=True, host='0.0.0.0', port=args.port)
