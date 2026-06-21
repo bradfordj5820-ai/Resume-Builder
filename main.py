@@ -152,7 +152,8 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
 
 def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_text):
     # FIXED: Added index to correctly grab file extension string
-    file_extension = os.path.splitext(resume_filename).lower()
+# Ensure the index is added to extract the extension correctly
+        file_extension = os.path.splitext(resume_filename).lower()
     temp_resume_path = f"/tmp/{os.urandom(24).hex()}{file_extension}"
     
     with open(temp_resume_path, 'wb') as f:
