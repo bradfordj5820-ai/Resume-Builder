@@ -1,3 +1,5 @@
+from resume_engine import analyze_resume  # Assume this is your main function
+from sheets_manager import update_results_sheet # Assume this logs to Google Sheets
 import os
 import re
 from flask import Flask, request, jsonify
