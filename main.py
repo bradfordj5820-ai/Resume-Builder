@@ -22,7 +22,8 @@ def firebase_auth_required(f):
 def run_minimal_api(filename, jd_text):
     # Safe splitting: only split if '.' exists
     if '.' in filename:
-        ext = filename.rsplit('.', 1).lower()
+        # Access the extension string at index [-1], then call lower()
+        ext = filename.rsplit('.', 1)[-1].lower()
     else:
         ext = ''
     return {"status": "success", "extension": ext, "job_title": jd_text[:20]}
