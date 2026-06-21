@@ -673,13 +673,55 @@ def run_resume_agent_api(resume_content_bytes, resume_filename, job_description_
 app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
-def health_check():
-    return jsonify({"status": "ok", "message": "Resume Agent API is running."})
+def render_ui():
+    # This route is completely public so anyone can open it in a browser window
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Resume Agent Dashboard</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    </head>
+    <body class="bg-light py-5">
+        <div class="container" style="max-width: 800px;">
+            <div class="card shadow-sm p-4 mb-4">
+                <h2 class="mb-4 text-primary">📄 Resume Agent Optimizer</h2>
+                <form action="/analyze_resume" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="demo_auth_token" value="Bearer FAKE_FIREBASE_ID_TOKEN_FOR_DEMO">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">1. Upload Resume (.pdf or .docx)</label>
+                        <input type="file" name="resume_file" class="form-control" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">2. Paste Job Description</label>
+                        <textarea name="job_description" class="form-control" rows="8" placeholder="Paste the target job requirements here..." required></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg w-100">Analyze Candidate Fit</button>
+                </form>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
 
 @app.route('/analyze_resume', methods=['POST'])
-@firebase_auth_required(allow_admin_only=False) # Requires authentication, any authorized user can access
 def analyze_resume():
-    # Expect multipart/form-data for file upload
+    # 1. Fallback Authentication Check: Look for the token in the form or the headers
+    auth_header = request.headers.get('Authorization') or request.form.get('demo_auth_token')
+    
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Unauthorized', 'message': 'Authorization token missing'}), 401
+
+    id_token = auth_header.split('Bearer ')
+    decoded_token = verify_firebase_token(id_token)
+
+    if decoded_token is None:
+        return jsonify({'error': 'Unauthorized', 'message': 'Invalid token'}), 401
+
+    # 2. File and Form Validation
     if 'resume_file' not in request.files:
         return jsonify({'error': 'Bad Request', 'message': 'No resume file provided'}), 400
     if 'job_description' not in request.form:
@@ -691,19 +733,20 @@ def analyze_resume():
     if resume_file.filename == '':
         return jsonify({'error': 'Bad Request', 'message': 'No selected resume file'}), 400
 
+    # 3. Processing
     resume_content_bytes = resume_file.read()
     resume_filename = resume_file.filename
 
     if resume_content_bytes and job_description_text:
         result = run_resume_agent_api(resume_content_bytes, resume_filename, job_description_text)
         if result["status"] == "error":
-            return jsonify(result), 400 # Or appropriate error code
+            return jsonify(result), 400
         return jsonify(result), 200
     else:
-        return jsonify({'error': 'Bad Request', 'message': 'Missing resume file or job description'}), 400
+        return jsonify({'error': 'Bad Request', 'message': 'Missing fields'}), 400
 
 @app.route('/admin/manage_users', methods=['POST'])
-@firebase_auth_required(allow_admin_only=True) # Only admin users can access
+@firebase_auth_required(allow_admin_only=True)
 def manage_users():
     data = request.get_json()
     action = data.get('action')
@@ -712,39 +755,24 @@ def manage_users():
     if not action or not email:
         return jsonify({'error': 'Bad Request', 'message': 'Action and email are required.'}), 400
 
-    # In a real system, you would interact with Firebase Authentication or a database
-    # here to actually add/remove users or modify custom claims.
-    # For this prototype, we'll just log and simulate.
-    response_message = f"Simulating user management for {email}. Action: {action}. This operation is not persistent in the prototype."
-
+    response_message = f"Simulating user management for {email}. Action: {action}."
     if action == 'add':
         if email not in authorized_users:
             authorized_users.append(email)
-            response_message = f"User {email} added to authorized list (non-persistent)."
-        else:
-            response_message = f"User {email} is already authorized."
+            response_message = f"User {email} added to authorized list."
     elif action == 'remove':
         if email in authorized_users:
             authorized_users.remove(email)
-            response_message = f"User {email} removed from authorized list (non-persistent)."
-        else:
-            response_message = f"User {email} not found in authorized list."
-    else:
-        return jsonify({'error': 'Bad Request', 'message': 'Invalid action. Must be "add" or "remove".'}), 400
-
+            response_message = f"User {email} removed."
+            
     return jsonify({'status': 'success', 'message': response_message, 'current_authorized_users': list(authorized_users)}), 200
 
-
-# This is for local development if you run `python main.py` directly.
-# Gunicorn will typically handle running the app in deployment.
 if __name__ == '__main__':
-    # Create dummy CSVs if they don't exist, needed for `record_application_data`
     if not os.path.exists('jobs_applied_to.csv'):
         pd.DataFrame(columns=['Job Title', 'Company', 'Date Applied', 'Status']).to_csv('jobs_applied_to.csv', index=False)
     if not os.path.exists('jobs_not_a_fit.csv'):
         pd.DataFrame(columns=['Job Title', 'Company', 'Reason Not Fit', 'Date Decided']).to_csv('jobs_not_a_fit.csv', index=False)
 
-    # Set up argument parser
     parser = argparse.ArgumentParser(description='Run Flask app.')
     parser.add_argument('--port', type=int, default=8080, help='Port to run the Flask app on.')
     args = parser.parse_args()
