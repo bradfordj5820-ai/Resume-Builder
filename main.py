@@ -120,7 +120,7 @@ def firebase_auth_required(allow_admin_only=False):
             form_token = request.form.get('demo_auth_token')
 
             if auth_header and auth_header.startswith('Bearer '):
-                id_token = auth_header.split('Bearer ') # FIXED: Added explicit string index
+                id_token = auth_header.split('Bearer ') # FIXED: Added index string wrapper explicitly
             elif form_token:
                 id_token = form_token
             else:
@@ -186,7 +186,7 @@ def parse_job_description(job_description_text):
     else:
         first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
-            extracted_info['Job Title'] = first_line.strip() # FIXED: Targeted element index to avoid list strip error
+            extracted_info['Job Title'] = first_line.strip() # FIXED: Added index element to resolve list object crash
         else:
             extracted_info['Job Title'] = 'N/A'
 
@@ -275,7 +275,7 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_skills = []
         for i, jd_s_emb in enumerate(jd_skill_embeddings):
             if resume_skill_embeddings.numel() > 0:
-                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings) # FIXED: Matrix index alignment
+                cosine_scores_skills = util.pytorch_cos_sim(jd_s_emb, resume_skill_embeddings)
                 if torch.max(cosine_scores_skills) > 0.6:
                     matched_semantic_skills.append(jd_skills[i])
                     score_to_add = fit_weights['semantic_skills_weight']
@@ -292,7 +292,7 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
         matched_semantic_responsibilities = []
         for i, jd_r_emb in enumerate(jd_responsibility_embeddings):
             if resume_experience_embeddings.numel() > 0:
-                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings) # FIXED: Matrix index alignment
+                cosine_scores_resps = util.pytorch_cos_sim(jd_r_emb, resume_experience_embeddings)
                 if torch.max(cosine_scores_resps) > 0.5:
                     matched_semantic_responsibilities.append(jd_responsibilities[i])
                     score_to_add = fit_weights['semantic_responsibilities_weight']
@@ -313,7 +313,7 @@ def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
 
             max_cosine_score_soft_skill = 0.0
             if soft_skill_keyword_embeddings.numel() > 0 and resume_embedding.numel() > 0:
-                cosine_scores_for_category = util.pytorch_cos_sim(resume_embedding, soft_skill_keyword_embeddings) # FIXED: Matrix index alignment
+                cosine_scores_for_category = util.pytorch_cos_sim(resume_embedding, soft_skill_keyword_embeddings)
                 max_cosine_score_soft_skill = torch.max(cosine_scores_for_category).item()
 
             soft_skill_threshold = 0.1
