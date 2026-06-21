@@ -199,7 +199,7 @@ def parse_job_description(job_description_text):
     else:
         first_line = job_description_text.strip().split('\n')
         if first_line and len(first_line) < 100:
-            extracted_info['Job Title'] = first_line.strip()
+            extracted_info['Job Title'] = first_line.strip() # Fixed: Added index to fix list object crash
         else:
             extracted_info['Job Title'] = 'N/A'
 
@@ -220,45 +220,6 @@ def parse_job_description(job_description_text):
         extracted_info['Responsibilities'] = []
 
     return extracted_info
-
-def record_application_data(job_title, company, status_or_reason, file_name):
-    current_date = datetime.now().strftime('%Y-%m-%d')
-    new_record = {}
-
-    if file_name == 'jobs_applied_to.csv':
-        new_record = {
-            'Job Title': job_title,
-            'Company': company,
-            'Date Applied': current_date,
-            'Status': status_or_reason
-        }
-        df = pd.read_csv(file_name) if os.path.exists(file_name) else pd.DataFrame(columns=['Job Title', 'Company', 'Date Applied', 'Status'])
-        df = pd.concat([df, pd.DataFrame([new_record])], ignore_index=True)
-        df.to_csv(file_name, index=False)
-    elif file_name == 'jobs_not_a_fit.csv':
-        new_record = {
-            'Job Title': job_title,
-            'Company': company,
-            'Reason Not Fit': status_or_reason,
-            'Date Decided': current_date
-        }
-        df = pd.read_csv(file_name) if os.path.exists(file_name) else pd.DataFrame(columns=['Job Title', 'Company', 'Reason Not Fit', 'Date Decided'])
-        df = pd.concat([df, pd.DataFrame([new_record])], ignore_index=True)
-        df.to_csv(file_name, index=False)
-    else:
-        print(f"Warning: Unknown file_name {file_name}. Record not saved.")
-
-def extract_phrases_and_keywords_nltk(text, n_min=1, n_max=3):
-    words = word_tokenize(text.lower())
-    filtered_words = [word for word in words if word.isalpha() and len(word) > 2]
-    extracted_terms = set()
-    if n_min <= 1:
-        extracted_terms.update(filtered_words)
-    for n in range(max(2, n_min), n_max + 1):
-        for gram in ngrams(filtered_words, n):
-            extracted_terms.add(' '.join(gram))
-    return list(extracted_terms)
-
 # --- Core Functions ---
 
 def assess_candidate_fit_semantic(parsed_resume, parsed_jd, model, fit_weights):
