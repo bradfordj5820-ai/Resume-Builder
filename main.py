@@ -31,12 +31,37 @@ def run_minimal_api(filename, jd_text):
 # --- Routes ---
 @app.route('/', methods=['GET'])
 def render_ui():
-    return '''<form action="/analyze" method="post" enctype="multipart/form-data">
-                <input type="text" name="demo_auth_token" value="FAKE_FIREBASE_ID_TOKEN_FOR_DEMO">
-                <input type="file" name="resume_file">
-                <textarea name="job_description"></textarea>
-                <button type="submit">Analyze</button>
-              </form>'''
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Resume Agent Dashboard</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+    </head>
+    <body class="bg-light py-5">
+        <div class="container" style="max-width: 800px;">
+            <div class="card shadow-sm p-4">
+                <h2 class="mb-4 text-primary">📄 Resume Agent Optimizer</h2>
+                <form action="/analyze" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Auth Token</label>
+                        <input type="text" name="demo_auth_token" class="form-control" value="FAKE_FIREBASE_ID_TOKEN_FOR_DEMO" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">1. Upload Resume</label>
+                        <input type="file" name="resume_file" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">2. Paste Job Description</label>
+                        <textarea name="job_description" class="form-control" rows="8" placeholder="Paste requirements here..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg w-100">Analyze Candidate Fit</button>
+                </form>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
 
 @app.route('/analyze', methods=['POST'])
 @firebase_auth_required
