@@ -128,11 +128,16 @@ def firebase_auth_required(allow_admin_only=False):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            auth_header = request.headers.get('Authorization')
-            if not auth_header or not auth_header.startswith('Bearer '):
-                return jsonify({'error': 'Unauthorized', 'message': 'Authorization token missing or invalid format'}), 401
+# 1. Fallback Authentication Check: Read from header or form field directly
+    auth_header = request.headers.get('Authorization')
+    form_token = request.form.get('demo_auth_token')
 
-            id_token = auth_header.split('Bearer ')[1]
+    if auth_header and auth_header.startswith('Bearer '):
+        id_token = auth_header.split('Bearer ')
+    elif form_token:
+        id_token = form_token
+    else:
+        return jsonify({'error': 'Unauthorized', 'message': 'Authorization token missing'}), 401
             decoded_token = verify_firebase_token(id_token)
 
             if decoded_token is None:
@@ -687,7 +692,7 @@ def render_ui():
             <div class="card shadow-sm p-4 mb-4">
                 <h2 class="mb-4 text-primary">📄 Resume Agent Optimizer</h2>
                 <form action="/analyze_resume" method="post" enctype="multipart/form-data">
-                    <input type="hidden" name="demo_auth_token" value="Bearer FAKE_FIREBASE_ID_TOKEN_FOR_DEMO">
+                    <input type="hidden" name="demo_auth_token" value="FAKE_FIREBASE_ID_TOKEN_FOR_DEMO">
                     
                     <div class="mb-3">
                         <label class="form-label fw-bold">1. Upload Resume (.pdf or .docx)</label>
